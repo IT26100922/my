@@ -1,0 +1,1 @@
+Place the PostgreSQL JDBC driver JAR here (for example, `postgresql-42.7.x.jar`). It is the only external runtime dependency and implements JDBC; it is not a framework. Compilation itself requires only the JDK.
