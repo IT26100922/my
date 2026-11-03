@@ -1,0 +1,65 @@
+﻿# CineMax sales report
+# period,2026-10-18,2026-11-14
+# currency,LKR
+# note,payments on cancelled bookings are excluded from every money figure below
+# graphics,columns called *bar* draw a chart inside the cell - set that column to a monospace font (Consolas or Courier New) and the bars line up
+
+SUMMARY
+metric,value
+gross_sales_lkr,50216.80
+refunds_lkr,0.00
+net_sales_lkr,50216.80
+convenience_fees_lkr,316.80
+payments,12
+tickets_sold,24
+confirmed_bookings,12
+cancelled_bookings,0
+showtimes,36
+occupancy_percent,0.9
+daily_net_sparkline,▁▁▇█▆▇▅▆▆▇▄▄▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+
+DAILY
+date,net_revenue_lkr,tickets,bar
+2026-10-18,0.00,0,
+2026-10-19,0.00,0,
+2026-10-20,5400.00,2,███████████████████████▍
+2026-10-21,6480.00,2,████████████████████████████
+2026-10-22,4500.00,2,███████████████████▌
+2026-10-23,5400.00,2,███████████████████████▍
+2026-10-24,3400.00,2,██████████████▊
+2026-10-25,4080.00,2,█████████████████▋
+2026-10-26,4800.00,2,████████████████████▊
+2026-10-27,4896.00,2,█████████████████████▏
+2026-10-28,3182.40,2,█████████████▊
+2026-10-29,3182.40,2,█████████████▊
+2026-10-30,2448.00,2,██████████▋
+2026-10-31,2448.00,2,██████████▋
+2026-11-01,0.00,0,
+2026-11-02,0.00,0,
+2026-11-03,0.00,0,
+2026-11-04,0.00,0,
+2026-11-05,0.00,0,
+2026-11-06,0.00,0,
+2026-11-07,0.00,0,
+2026-11-08,0.00,0,
+2026-11-09,0.00,0,
+2026-11-10,0.00,0,
+2026-11-11,0.00,0,
+2026-11-12,0.00,0,
+2026-11-13,0.00,0,
+2026-11-14,0.00,0,
+
+BY_MOVIE
+title,tickets,net_lkr,share_percent,bar
+The Last Monsoon,4,11880.00,24,██████████████████████████████████
+Starfall Legacy,4,9900.00,20,████████████████████████████▍
+Neon Circuit,4,9696.00,19,███████████████████████████▊
+Ocean of Echoes,4,7480.00,15,█████████████████████▍
+Midnight Harbor,4,6364.80,13,██████████████████▎
+Kandy Dreams,4,4896.00,10,██████████████
+
+BY_PAYMENT_METHOD
+method,payments,amount_lkr,share_percent,bar
+CARD,5,16156.80,32,█████████████████████████▎
+CASH_COUNTER,3,12280.00,24,███████████████████▏
+WALLET,4,21780.00,43,██████████████████████████████████

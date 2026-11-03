@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CineMax theatres in Negombo and Colombo, with standard, premium and VIP screens.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Theatres · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <main class="container">
+    <div class="section-head" style="margin-top:2rem">
+      <div>
+        <h1>Our theatres</h1>
+        <p>Choose the screen that suits you: standard, premium recliner or VIP lounge.</p>
+      </div>
+    </div>
+    <div class="grid" id="theatreGrid"></div>
+  </main>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 3 (Theatre & Screen) UI: theatres with their screens and seat counts */
+    async function load() {
+      const grid = document.getElementById('theatreGrid');
+      try {
+        const [theatres, screens] = await Promise.all([API.get('/api/theatres'), API.get('/api/screens')]);
+        if (theatres.length === 0) { grid.innerHTML = '<div class="empty card">No theatres yet.</div>'; return; }
+        grid.innerHTML = theatres.map(t => {
+          const mine = screens.filter(s => s.theatreId === t.id);
+          return `
+          <div class="card theatre-card" style="grid-column: span 1">
+            <span class="badge badge-std">${esc(t.city)}</span>
+            <h3 class="mt-1">${esc(t.name)}</h3>
+            <p style="margin-bottom:.6rem">${esc(t.address || '')}${t.phone ? ' · ' + esc(t.phone) : ''}</p>
+            ${mine.map(s => `
+              <div class="screen-chip">
+                <strong>${esc(s.name)}</strong>
+                <span class="muted">${esc(s.category)} · ${s.totalSeats} seats · ×${Number(s.priceMultiplier).toFixed(2)}</span>
+              </div>`).join('') || '<span class="muted">No screens yet</span>'}
+          </div>`;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = '';
+        toast(err.message, 'err');
+      }
+    }
+    renderNav('theatres');
+    load();
+  </script>
+</body>
+</html>

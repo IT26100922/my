@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CineMax staff dashboard for movies, showtimes, bookings and reports.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Staff dashboard · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=10">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <a class="brand" href="index.html"><img class="logo-img" src="/img/logo.svg" alt=""><span>CineMax Admin</span></a>
+      <nav id="sideNav" class="side-nav"></nav>
+      <div class="sidebar-foot">
+        <a class="btn btn-ghost btn-sm" href="admin-scan.html">Door check-in</a>
+        <a class="btn btn-ghost btn-sm" href="live.html">Live database</a>
+        <a class="btn btn-ghost btn-sm" href="index.html">View public site</a>
+        <button class="btn btn-ghost btn-sm theme-toggle" id="themeToggle" type="button"></button>
+        <button class="btn btn-danger btn-sm" id="logoutBtn">Log out</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="toolbar">
+        <div>
+          <h1 id="sectionTitle">Dashboard</h1>
+          <p id="sectionOwner" class="muted"></p>
+        </div>
+      </div>
+      <div id="sectionBody"><div class="loader">Loading…</div></div>
+    </main>
+  </div>
+
+  <!-- Generic create / edit dialog used by every CRUD section -->
+  <div class="modal-backdrop" id="modal">
+    <div class="card modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <h2 id="modalTitle">Form</h2>
+        <button class="btn btn-ghost btn-sm" type="button" id="modalClose" aria-label="Close">✕</button>
+      </div>
+      <form id="modalForm"></form>
+    </div>
+  </div>
+
+  <div class="toast-wrap"></div>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/admin.js?v=5"></script>
+</body>
+</html>

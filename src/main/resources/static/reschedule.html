@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Move your CineMax booking to another showtime of the same film.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Move booking · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <main class="container">
+    <div class="loader" id="loading">Loading your booking…</div>
+
+    <div id="content" class="hidden">
+      <a href="my-bookings.html" class="back-link">← Back to my bookings</a>
+      <div class="section-head" style="margin-top:.6rem">
+        <div>
+          <h1 id="pageTitle">Move booking</h1>
+          <p id="pageMeta"></p>
+        </div>
+      </div>
+
+      <div class="split">
+        <section class="card stack" id="stepShows">
+          <h2>1. Choose a showtime</h2>
+          <p class="hint" style="margin:0">Moves close 2 hours before the original show. Pick another showtime of the same film.</p>
+          <div class="chips" id="dayChips"></div>
+          <div class="move-grid" id="showOptions"></div>
+        </section>
+
+        <aside class="stack">
+          <section class="card" id="stepSeats">
+            <h2>2. Choose seats</h2>
+            <p class="hint" id="seatHint" style="margin:0 0 .75rem"></p>
+            <div class="together-bar">
+              <button type="button" class="btn btn-ghost" id="togetherBtn">Find seats together</button>
+            </div>
+            <div class="screen-wrap">
+              <div class="screen-bar"></div>
+              <div class="screen-label">SCREEN</div>
+            </div>
+            <div class="seat-map" id="seatMap"></div>
+            <div class="legend">
+              <span><i class="l-free"></i>Available</span>
+              <span><i class="l-sel"></i>Your seats</span>
+              <span><i class="l-booked"></i>Taken</span>
+            </div>
+          </section>
+
+          <section class="card stack" id="summary">
+            <h2>Summary</h2>
+            <div class="summary-row"><span class="k">Current showtime</span><span id="sFrom"></span></div>
+            <div class="summary-row"><span class="k">New showtime</span><span id="sTo">Not chosen yet</span></div>
+            <div class="summary-row"><span class="k">Seats</span><span id="sSeats">None selected</span></div>
+            <div class="summary-row"><span class="k">Paid so far</span><span id="sPaid"></span></div>
+            <div class="summary-row"><span class="k">New total</span><span id="sNew">LKR 0.00</span></div>
+            <div class="summary-row"><span class="k">Difference</span><span class="delta" id="sDelta">—</span></div>
+
+            <div id="payBlock" class="hidden stack">
+              <div class="field">
+                <label for="method">Payment method for the extra amount</label>
+                <select id="method">
+                  <option value="CARD">Credit / debit card (2% fee)</option>
+                  <option value="WALLET">Mobile wallet</option>
+                  <option value="CASH_COUNTER">Pay at cinema counter</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="reference" id="refLabel">Card number</label>
+                <input id="reference" autocomplete="off" placeholder="16-digit card number">
+                <span class="hint" id="refHint">Demo: any 16 digits. Only the last 4 digits are stored.</span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-block" id="confirmBtn" disabled>Confirm move</button>
+            <div class="error-text" id="moveError"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Move a confirmed booking to another showtime of the same film (CUSTOMER). */
+    const METHODS = {
+      CARD:         { label: 'Card number',  placeholder: '16-digit card number', hint: 'Demo: any 16 digits. Only the last 4 digits are stored.' },
+      WALLET:       { label: 'Wallet ID',    placeholder: 'Phone number or wallet ID', hint: '5–40 characters, for example 0771234567.' },
+      CASH_COUNTER: { label: 'Counter code', placeholder: 'CNT-01', hint: 'Show this code at the cinema counter. Format CNT-nn.' }
+    };
+
+    let booking = null;      // the booking being moved
+    let shows = [];          // other showtimes of the same film
+    let target = null;       // the chosen showtime (full detail with bookedSeats)
+    let selected = new Set();
+    let activeDay = null;
+    const $ = id => document.getElementById(id);
+
+    async function init() {
+      const me = await requireRole('CUSTOMER', 'customer-login.html');
+      if (!me) return;
+      renderNav('bookings');
+      try {
+        const id = qs('bookingId');
+        if (!id) throw new Error('No booking selected. Open this page from My bookings.');
+        booking = await API.get('/api/customer/bookings/' + id);
+        if (booking.status !== 'CONFIRMED') throw new Error('Only confirmed bookings can be moved. This booking is ' + booking.status.toLowerCase().replace('_', ' ') + '.');
+        if (new Date(booking.showTime) <= new Date()) throw new Error('This showtime has already started.');
+        $('pageTitle').textContent = 'Move ' + booking.movieTitle;
+        $('pageMeta').textContent = 'Booking ' + booking.reference + ' · ' + booking.seatCodes.length + ' seat' + (booking.seatCodes.length === 1 ? '' : 's') + ' · paid ' + money(booking.totalAmount);
+        $('sFrom').textContent = fmtDateTime(booking.showTime) + ' · ' + booking.theatreName + ' / ' + booking.screenName;
+        $('sPaid').textContent = money(booking.totalAmount);
+        $('seatHint').textContent = 'Choose exactly ' + booking.seatCodes.length + ' seat' + (booking.seatCodes.length === 1 ? '' : 's') + ' on the new showtime.';
+        $('togetherBtn').textContent = 'Find ' + booking.seatCodes.length + ' seat' + (booking.seatCodes.length === 1 ? '' : 's') + ' together';
+        const all = await API.get('/api/shows?movieId=' + booking.movieId);
+        shows = all.filter(s => s.id !== booking.showId && new Date(s.startTime) > new Date());
+        renderDays();
+        $('loading').classList.add('hidden');
+        $('content').classList.remove('hidden');
+      } catch (err) {
+        $('loading').textContent = err.message;
+      }
+    }
+
+    function renderDays() {
+      const days = [...new Set(shows.map(s => dayKey(s.startTime)))];
+      if (days.length === 0) {
+        $('showOptions').innerHTML = '<div class="empty card">There are no other showtimes for this film right now.</div>';
+        $('dayChips').innerHTML = '';
+        return;
+      }
+      activeDay = days[0];
+      $('dayChips').innerHTML = days.map(d => {
+        const label = new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+        return `<button type="button" class="chip" data-day="${d}">${label}</button>`;
+      }).join('');
+      document.querySelectorAll('#dayChips .chip').forEach(btn => btn.addEventListener('click', () => {
+        activeDay = btn.dataset.day;
+        renderShowOptions();
+      }));
+      renderShowOptions();
+    }
+
+    function renderShowOptions() {
+      document.querySelectorAll('#dayChips .chip').forEach(b => b.classList.toggle('active', b.dataset.day === activeDay));
+      const list = shows.filter(s => dayKey(s.startTime) === activeDay);
+      $('showOptions').innerHTML = list.map(s => `
+        <button type="button" class="move-show ${target && target.id === s.id ? 'active' : ''}" data-show="${s.id}">
+          <strong>${fmtTime(s.startTime)}</strong>
+          <small>${esc(s.theatreName)} · ${esc(s.screenName)}</small>
+          <small>${money(s.seatPrice)} / seat · ${s.availableSeats} seats left</small>
+        </button>`).join('');
+      document.querySelectorAll('#showOptions .move-show').forEach(btn => btn.addEventListener('click', () => chooseShow(btn.dataset.show)));
+    }
+
+    async function chooseShow(id) {
+      try {
+        target = await API.get('/api/shows/' + id);
+        selected = new Set();
+        renderShowOptions();
+        $('sTo').textContent = fmtDateTime(target.startTime) + ' · ' + target.theatreName + ' / ' + target.screenName;
+        renderSeatMap();
+        refreshSummary();
+        $('stepSeats').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+
+    function renderSeatMap() {
+      if (!target) {
+        $('seatMap').innerHTML = '<p class="hint" style="text-align:center">Choose a showtime to see its seats.</p>';
+        return;
+      }
+      const booked = new Set(target.bookedSeats);
+      const cols = target.seatsPerRow;
+      let html = '';
+      for (let r = 0; r < target.rowCount; r++) {
+        const letter = String.fromCharCode(65 + r);
+        html += `<div class="seat-row"><span class="row-label">${letter}</span>`;
+        for (let c = 1; c <= cols; c++) {
+          const code = letter + c;
+          const taken = booked.has(code);
+          const mine = selected.has(code);
+          const aisle = cols >= 8 && c === Math.floor(cols / 2) + 1 ? ' aisle' : '';
+          const cls = ['seat', mine ? 'selected' : '', taken ? 'booked' : '', aisle].join(' ').trim();
+          html += `<button type="button" class="${cls}" data-code="${code}" title="${code}" ${taken ? 'disabled' : ''}>${taken ? '' : c}</button>`;
+        }
+        html += `<span class="row-label">${letter}</span></div>`;
+      }
+      $('seatMap').innerHTML = html;
+    }
+
+    $('seatMap').addEventListener('click', (e) => {
+      const btn = e.target.closest('.seat');
+      if (!btn || btn.disabled || !target) return;
+      const code = btn.dataset.code;
+      const need = booking.seatCodes.length;
+      if (selected.has(code)) {
+        selected.delete(code);
+      } else {
+        if (selected.size >= need) { toast('Choose exactly ' + need + ' seat' + (need === 1 ? '' : 's') + '. Deselect one first.', 'err'); return; }
+        selected.add(code);
+      }
+      renderSeatMap();
+      refreshSummary();
+    });
+
+    /* Same rule as booking.html: the first run of free adjacent seats, nearest the middle of the screen. */
+    $('togetherBtn').addEventListener('click', () => {
+      if (!target) { toast('Choose a showtime first.', 'err'); return; }
+      const count = booking.seatCodes.length;
+      const booked = new Set(target.bookedSeats);
+      const midRow = (target.rowCount - 1) / 2;
+      const midCol = (target.seatsPerRow + 1) / 2;
+      const rows = [...Array(target.rowCount).keys()].sort((a, b) => Math.abs(a - midRow) - Math.abs(b - midRow));
+      for (const r of rows) {
+        const letter = String.fromCharCode(65 + r);
+        let best = null;
+        for (let start = 1; start + count - 1 <= target.seatsPerRow; start++) {
+          const codes = Array.from({ length: count }, (_, i) => letter + (start + i));
+          if (codes.some(code => booked.has(code))) continue;
+          const score = Math.abs(start + (count - 1) / 2 - midCol);
+          if (!best || score < best.score) best = { codes, score };
+        }
+        if (best) {
+          selected = new Set(best.codes);
+          renderSeatMap();
+          refreshSummary();
+          return;
+        }
+      }
+      toast('No ' + count + ' seats together are free on that showtime. Try another time.', 'err');
+    });
+
+    function refreshSummary() {
+      const need = booking.seatCodes.length;
+      $('sSeats').textContent = selected.size ? [...selected].sort().join(', ') : 'None selected';
+      if (!target) {
+        $('sNew').textContent = 'LKR 0.00';
+        $('sDelta').textContent = '—';
+        $('payBlock').classList.add('hidden');
+        $('confirmBtn').disabled = true;
+        return;
+      }
+      const newTotal = Math.round(Number(target.seatPrice) * need * 100) / 100;
+      const diff = Math.round((newTotal - Number(booking.totalAmount)) * 100) / 100;
+      $('sNew').textContent = money(newTotal);
+      const delta = $('sDelta');
+      delta.className = 'delta';
+      if (diff > 0.005) {
+        delta.classList.add('up');
+        delta.textContent = 'Pay ' + money(diff) + ' more';
+        $('payBlock').classList.remove('hidden');
+        updateMethodUI();
+      } else if (diff < -0.005) {
+        delta.classList.add('down');
+        delta.textContent = 'Refund ' + money(-diff);
+        $('payBlock').classList.add('hidden');
+      } else {
+        delta.textContent = 'No change in price';
+        $('payBlock').classList.add('hidden');
+      }
+      const paymentOk = diff <= 0.005 || $('reference').value.trim().length > 0;
+      $('confirmBtn').disabled = !(selected.size === need && paymentOk);
+    }
+
+    function updateMethodUI() {
+      const cfg = METHODS[$('method').value];
+      $('refLabel').textContent = cfg.label;
+      $('reference').placeholder = cfg.placeholder;
+      $('refHint').textContent = cfg.hint;
+    }
+
+    $('method').addEventListener('change', () => { updateMethodUI(); refreshSummary(); });
+    $('reference').addEventListener('input', refreshSummary);
+
+    $('confirmBtn').addEventListener('click', async () => {
+      $('moveError').textContent = '';
+      const diff = Math.round((Number(target.seatPrice) * booking.seatCodes.length - Number(booking.totalAmount)) * 100) / 100;
+      const body = { showId: target.id, seatCodes: [...selected] };
+      if (diff > 0.005) {
+        body.method = $('method').value;
+        body.reference = $('reference').value.trim();
+      }
+      $('confirmBtn').disabled = true;
+      try {
+        await API.post('/api/customer/bookings/' + booking.id + '/reschedule', body);
+        toast('Booking moved to ' + fmtDateTime(target.startTime));
+        location.href = 'my-bookings.html';
+      } catch (err) {
+        $('moveError').textContent = err.message;
+        $('confirmBtn').disabled = false;
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

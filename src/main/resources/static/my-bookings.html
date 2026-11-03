@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="View, pay for, change or cancel your CineMax bookings.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>My bookings · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <main class="container">
+    <div class="section-head" style="margin-top:2rem">
+      <div>
+        <h1>My bookings</h1>
+        <p>Pay for pending reservations, change seats or cancel. Refunds follow the cancellation policy below.</p>
+      </div>
+      <div class="chips" id="filters">
+        <button class="chip active" data-filter="ALL">All</button>
+        <button class="chip" data-filter="PENDING_PAYMENT">Awaiting payment</button>
+        <button class="chip" data-filter="CONFIRMED">Confirmed</button>
+        <button class="chip" data-filter="CANCELLED">Cancelled</button>
+      </div>
+    </div>
+
+    <div class="stack" id="list"><div class="loader">Loading your bookings…</div></div>
+
+    <div class="card refund-card mt-3">
+      <h3>Refund policy</h3>
+      <p style="margin:0">Cancel 24 hours or more before the show for a <strong>full refund</strong>. Between 2 and 24 hours before, you get <strong>50% back</strong>. Less than 2 hours before, the booking is <strong>non-refundable</strong>. Pending reservations that are removed are never charged.</p>
+    </div>
+  </main>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 5 (Booking) UI: customer READ / UPDATE (edit seats) / DELETE (cancel) */
+    let bookings = [];
+    let filter = 'ALL';
+
+    async function load() {
+      const me = await requireRole('CUSTOMER', 'customer-login.html');
+      if (!me) return;
+      renderNav('bookings');
+      try {
+        bookings = await API.get('/api/customer/bookings');
+        render();
+      } catch (err) {
+        document.getElementById('list').innerHTML = `<div class="empty card">${esc(err.message)}</div>`;
+      }
+    }
+
+    function render() {
+      const list = document.getElementById('list');
+      const shown = bookings.filter(b => filter === 'ALL' || b.status === filter);
+      if (shown.length === 0) {
+        list.innerHTML = `<div class="empty card">No bookings here yet. <a href="index.html">Find a movie</a> and pick your seats!</div>`;
+        return;
+      }
+      list.innerHTML = shown.map(b => `
+        <article class="card booking-item">
+          <div>
+            <div class="row" style="margin-bottom:.35rem">
+              <span class="badge badge-muted">${esc(b.reference)}</span>
+              ${statusBadge(b.status)}
+            </div>
+            <h3>${esc(b.movieTitle)}</h3>
+            <p style="margin:0">${esc(b.theatreName)} · ${esc(b.screenName)} · ${fmtDateTime(b.showTime)}</p>
+            <p style="margin:.35rem 0 0"><strong>Seats:</strong> ${b.seatCodes.map(esc).join(', ')} <span class="muted">· ${money(b.totalAmount)}</span>
+              ${Number(b.discountAmount) > 0 ? `<span class="badge badge-imax" style="margin-left:.4rem">${esc(b.promoCode)} − ${money(b.discountAmount)}</span>` : ''}
+              ${b.status === 'CHECKED_IN' ? '<span class="badge badge-imax" style="margin-left:.4rem">checked in</span>' : ''}</p>
+          </div>
+          <div class="booking-actions">
+            ${b.status === 'PENDING_PAYMENT' ? `
+              <a class="btn btn-primary btn-sm" href="booking.html?bookingId=${b.id}">Pay / edit seats</a>
+              <button class="btn btn-danger btn-sm" data-cancel="${b.id}">Remove</button>` : ''}
+            ${b.status === 'CONFIRMED' ? `
+              <a class="btn btn-primary btn-sm" href="/api/customer/bookings/${b.id}/ticket.pdf">Ticket PDF</a>
+              <a class="btn btn-ghost btn-sm" href="booking.html?bookingId=${b.id}">View</a>
+              ${canMove(b) ? `<a class="btn btn-ghost btn-sm" href="reschedule.html?bookingId=${b.id}">Move to another showtime</a>` : ''}
+              ${b.seatCodes.length > 1 ? `<button class="btn btn-ghost btn-sm" data-drop="${b.id}">Drop some seats</button>` : ''}
+              <button class="btn btn-danger btn-sm" data-cancel="${b.id}">Cancel booking</button>` : ''}
+          </div>
+        </article>`).join('');
+      list.querySelectorAll('[data-cancel]').forEach(btn => btn.addEventListener('click', () => cancel(btn.dataset.cancel)));
+      list.querySelectorAll('[data-drop]').forEach(btn => btn.addEventListener('click', () => dropSeats(btn.dataset.drop)));
+    }
+
+    /**
+     * Partial cancellation: give back the seats you no longer need and keep the rest.
+     * The refund follows the same policy as a full cancellation, on the value of those seats only.
+     */
+    async function dropSeats(id) {
+      const b = bookings.find(x => String(x.id) === String(id));
+      if (!b) return;
+      const answer = prompt('Which seats do you want to give back?\nSeats on this booking: '
+        + b.seatCodes.join(', ') + '\n\nType them separated by commas (keep at least one):', b.seatCodes.slice(-1)[0]);
+      if (answer === null) return;
+      const seats = answer.split(',').map(x => x.trim().toUpperCase()).filter(Boolean);
+      if (!seats.length) return;
+      if (seats.length >= b.seatCodes.length) { toast('Use Cancel booking to give back every seat', 'err'); return; }
+      if (!confirm(`Give back seat(s) ${seats.join(', ')}? The refund follows the cancellation policy.`)) return;
+      try {
+        const result = await API.post(`/api/customer/bookings/${id}/cancel-seats`, { seatCodes: seats });
+        toast(result.message + (Number(result.refundAmount) > 0 ? '. Refund: ' + money(result.refundAmount) : ''));
+        await load();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+
+    /* Moves close 2 hours before the show, the same cutoff as cancellations. */
+    function canMove(b) {
+      return b.status === 'CONFIRMED' && (new Date(b.showTime) - new Date()) >= 2 * 60 * 60 * 1000;
+    }
+
+    async function cancel(id) {
+      const b = bookings.find(x => String(x.id) === String(id));
+      let msg = 'Remove this reservation? Your seats will be released.';
+      if (b && b.status === 'CONFIRMED') {
+        try {
+          const quote = await API.get('/api/customer/bookings/' + id + '/cancel-preview');
+          const refund = Number(quote.refundAmount || 0);
+          msg = refund > 0
+            ? `Cancel this booking? You will get a refund of ${money(refund)} of ${money(b.totalAmount)}.`
+            : `Cancel this booking? No refund applies this close to the show (${Math.max(0, quote.hoursBeforeShow)} hours before).`;
+        } catch (err) {
+          msg = 'Cancel this booking? The refund depends on how close the show is.';
+        }
+      }
+      if (!confirm(msg)) return;
+      try {
+        const result = await API.del('/api/customer/bookings/' + id);
+        const refund = Number(result.refundAmount || 0);
+        toast(refund > 0 ? `${result.message}. Refund: ${money(refund)}` : result.message);
+        await load();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+
+    document.querySelectorAll('#filters .chip').forEach(btn => btn.addEventListener('click', () => {
+      filter = btn.dataset.filter;
+      document.querySelectorAll('#filters .chip').forEach(c => c.classList.toggle('active', c === btn));
+      render();
+    }));
+
+    load();
+  </script>
+</body>
+</html>

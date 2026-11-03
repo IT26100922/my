@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Update your CineMax account details and loyalty points.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>My profile · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <main class="container">
+    <div class="section-head" style="margin-top:2rem">
+      <div>
+        <h1>My profile</h1>
+        <p>Keep your contact details up to date. Your email is used to sign in and cannot be changed.</p>
+      </div>
+    </div>
+
+    <div class="split">
+      <section class="card">
+        <h2>Personal details</h2>
+        <form id="profileForm" novalidate style="margin-top:1rem">
+          <div class="form-row">
+            <div class="field">
+              <label for="fullName">Full name</label>
+              <input id="fullName" required maxlength="100">
+            </div>
+            <div class="field">
+              <label for="phone">Phone</label>
+              <input id="phone" maxlength="20">
+            </div>
+          </div>
+          <div class="field">
+            <label for="email">Email (cannot be changed)</label>
+            <input id="email" disabled>
+          </div>
+          <div class="field">
+            <label for="newPassword">New password (optional)</label>
+            <input id="newPassword" type="password" minlength="8" maxlength="60" autocomplete="new-password">
+            <span class="hint">Leave this empty to keep your current password. Use at least 8 characters.</span>
+          </div>
+          <div class="error-text" id="error"></div>
+          <button class="btn btn-primary" type="submit">Save changes</button>
+        </form>
+      </section>
+
+      <aside class="stack">
+        <div class="card" id="walletCard">
+          <h3>Wallet</h3>
+          <div class="wallet-balance"><span class="num" id="walletBalance">LKR 0.00</span></div>
+          <p class="hint" style="margin:.3rem 0 0">Pay for seats from this balance and get refunds back instantly.</p>
+          <div class="wallet-actions">
+            <input id="topUpAmount" type="number" min="50" max="50000" step="50" placeholder="Amount (LKR)"
+                   style="width:150px" aria-label="Top-up amount">
+            <button class="btn btn-primary btn-sm" id="topUpBtn" type="button">Top up</button>
+          </div>
+          <ul class="wallet-list" id="walletList"></ul>
+        </div>
+        <div class="card">
+          <h3>Loyalty points</h3>
+          <div class="stat">
+            <span class="num gradient-text" id="points">0</span>
+            <span class="lbl">points · you earn 1 point per seat on every paid booking</span>
+          </div>
+          <p class="mt-2" style="margin-bottom:0"><span class="muted">Member since </span><span id="since"></span></p>
+        </div>
+        <div class="card danger-card">
+          <h3>Delete account</h3>
+          <p>Accounts with booking history cannot be deleted, so payment records stay intact.</p>
+          <button class="btn btn-danger" id="deleteBtn">Delete my account</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 1 (User & Authentication) UI: customer READ / UPDATE / DELETE own profile */
+    let me = null;
+
+    async function load() {
+      me = await requireRole('CUSTOMER', 'customer-login.html');
+      if (!me) return;
+      renderNav('profile');
+      const p = await API.get('/api/customer/profile');
+      document.getElementById('fullName').value = p.fullName;
+      document.getElementById('phone').value = p.phone || '';
+      document.getElementById('email').value = p.email;
+      document.getElementById('points').textContent = p.loyaltyPoints ?? 0;
+      document.getElementById('since').textContent = fmtDate(p.createdAt);
+      loadWallet();
+    }
+
+    /* ---------- wallet: balance, ledger, top-up ---------- */
+    async function loadWallet() {
+      let w;
+      try { w = await API.get('/api/customer/wallet'); } catch (e) { return; }
+      document.getElementById('walletBalance').textContent = money(w.balance);
+      document.getElementById('walletList').innerHTML = (w.entries || []).map(e => `
+        <li><span>${esc(e.note || e.type)}<small>${fmtDateTime(e.createdAt)}</small></span>
+            <span class="amt ${Number(e.amount) >= 0 ? 'in' : 'out'}">${Number(e.amount) >= 0 ? '+' : ''}${money(e.amount)}</span></li>`)
+        .join('') || '<li><span class="muted">No movements yet.</span></li>';
+    }
+
+    async function topUp() {
+      const amount = Number(document.getElementById('topUpAmount').value);
+      if (!amount || amount < 50) { toast('Enter at least LKR 50', 'err'); return; }
+      try {
+        await API.post('/api/customer/wallet/top-up', { amount, method: 'CARD' });
+        toast('Wallet topped up');
+        document.getElementById('topUpAmount').value = '';
+        loadWallet();
+      } catch (err) { toast(err.message, 'err'); }
+    }
+    document.getElementById('topUpBtn').addEventListener('click', topUp);
+
+    document.getElementById('profileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = document.getElementById('error');
+      error.textContent = '';
+      try {
+        await API.put('/api/customer/profile', {
+          fullName: document.getElementById('fullName').value.trim(),
+          phone: document.getElementById('phone').value.trim() || null,
+          newPassword: document.getElementById('newPassword').value || null
+        });
+        document.getElementById('newPassword').value = '';
+        toast('Profile updated');
+        load();
+      } catch (err) {
+        error.textContent = err.message;
+      }
+    });
+
+    document.getElementById('deleteBtn').addEventListener('click', async () => {
+      if (!confirm('Delete your account? This cannot be undone.')) return;
+      try {
+        await API.del('/api/customer/profile');
+        window.location.href = 'index.html';
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    });
+
+    load().catch(err => toast(err.message, 'err'));
+  </script>
+</body>
+</html>

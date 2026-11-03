@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Choose your seats on a live seat map and pay for your CineMax tickets.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Choose seats · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <main class="container">
+    <div class="loader" id="loading">Loading seat map…</div>
+
+    <div id="content" class="hidden">
+      <a href="#" id="backLink" class="back-link">← Back to movie</a>
+      <div class="section-head" style="margin-top:.6rem">
+        <div>
+          <h1 id="movieTitle"></h1>
+          <p id="showMeta"></p>
+        </div>
+        <div id="headerStatus"></div>
+      </div>
+
+      <div class="split">
+        <!-- Seat map and selection -->
+        <section class="card seat-card">
+          <div class="screen-wrap">
+            <div class="screen-bar"></div>
+            <div class="screen-label">SCREEN</div>
+          </div>
+          <div class="together-bar" id="togetherBar">
+            <label for="togetherCount">Seats together</label>
+            <select id="togetherCount" aria-label="Number of seats to find together"></select>
+            <button type="button" class="btn btn-ghost" id="togetherBtn">Find seats together</button>
+          </div>
+          <div class="seat-map" id="seatMap"></div>
+          <div class="legend">
+            <span><i class="l-free"></i>Available</span>
+            <span><i class="l-sel"></i>Your seats</span>
+            <span><i class="l-booked"></i>Taken</span>
+          </div>
+          <ul class="band-legend" id="bandLegend"></ul>
+          <p class="hint mt-2" id="lockNote" style="text-align:center"></p>
+        </section>
+
+        <aside class="stack">
+          <section class="card">
+            <h2>Your order</h2>
+            <div class="summary-row"><span class="k">Showtime</span><span id="sTime"></span></div>
+            <div class="summary-row"><span class="k">Screen</span><span id="sScreen"></span></div>
+            <div class="summary-row"><span class="k">Seats</span><span id="sSeats">None selected</span></div>
+            <div class="summary-row"><span class="k">Price per seat</span><span id="sPrice"></span></div>
+            <div class="summary-row"><span class="k">Pricing rule</span><span id="sRule"></span></div>
+            <div class="field" id="promoField" style="margin-top:.6rem">
+              <label for="promoInput">Promo code</label>
+              <div class="promo-row">
+                <input id="promoInput" placeholder="WELCOME10" autocomplete="off" aria-describedby="promoNote">
+                <button class="btn btn-ghost" type="button" id="promoApply">Apply</button>
+              </div>
+              <p class="promo-note" id="promoNote"></p>
+            </div>
+            <div class="summary-row hidden" id="discountRow"><span class="k">Discount</span><span id="sDiscount">LKR 0.00</span></div>
+            <div class="summary-row" style="align-items:center"><span class="k">Total</span><span class="total" id="sTotal">LKR 0.00</span></div>
+            <div class="hold-box hidden" id="holdBox" role="status" aria-live="polite"></div>
+            <div class="mt-2" id="actionArea"></div>
+          </section>
+
+          <!-- Checkout -->
+          <section class="card hidden" id="paymentCard">
+            <h2>Checkout</h2>
+            <div id="payForm">
+              <div class="field">
+                <label for="method">Payment method</label>
+                <select id="method">
+                  <option value="CARD">Credit / debit card</option>
+                  <option value="WALLET">Mobile wallet</option>
+                  <option value="CASH_COUNTER">Pay at cinema counter</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="reference" id="refLabel">Card number</label>
+                <input id="reference" autocomplete="off">
+                <span class="hint" id="refHint"></span>
+              </div>
+              <div class="summary-row"><span class="k">Convenience fee</span><span id="feeText">LKR 0.00</span></div>
+              <div class="summary-row"><span class="k">Total to pay</span><strong id="payTotal">LKR 0.00</strong></div>
+              <button class="btn btn-primary btn-block mt-2" id="payBtn">Pay now</button>
+              <div class="error-text" id="payError"></div>
+            </div>
+            <div id="receipt" class="hidden"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 5 (Booking & Seat Reservation) + Member 6 (Payment) UI.
+       Modes: ?showId=X -> new booking   |   ?bookingId=Y -> edit seats / pay for a pending booking */
+    const METHODS = {
+      CARD:         { label: 'Card number',  placeholder: '16-digit card number', fee: 0.02,
+                      hint: 'Demo: any 16 digits. A 2% convenience fee applies. Only the last 4 digits are stored.' },
+      WALLET:       { label: 'Wallet ID',    placeholder: 'Phone number or wallet ID', fee: 0,
+                      hint: '5–40 characters, for example 0771234567.' },
+      CASH_COUNTER: { label: 'Counter code', placeholder: 'CNT-01', fee: 0,
+                      hint: 'Show this code at the cinema counter. Format CNT-nn.' }
+    };
+
+    let me = null, show = null, booking = null, showId = null, bookingId = null;
+    let selected = new Set();
+    let booked = new Set();
+    let holdEndsAt = null;   // ms timestamp when the seat hold ends (null = no hold)
+    let promo = null;        // { code, discount, valid } once the customer applied a code
+    let bands = [];          // seat bands of this screen: [{ band, label, rows, price }]
+    let liveTimer = null, holdTimer = null;
+
+    const $ = id => document.getElementById(id);
+
+    async function init() {
+      fillTogetherOptions();
+      me = await requireRole('CUSTOMER', 'customer-login.html');
+      if (!me) return;
+      renderNav('movies');
+      try {
+        bookingId = qs('bookingId') ? Number(qs('bookingId')) : null;
+        if (bookingId) {
+          setBooking(await API.get('/api/customer/bookings/' + bookingId));
+          showId = booking.showId;
+          selected = new Set(booking.seatCodes);
+        } else {
+          showId = Number(qs('showId'));
+          if (!showId) throw new Error('No showtime selected. Pick one from a movie page.');
+        }
+        await loadShow();
+        $('loading').classList.add('hidden');
+        $('content').classList.remove('hidden');
+        renderAll();
+        liveTimer = setInterval(liveRefresh, 5000);
+        holdTimer = setInterval(updateHold, 1000);
+        updateHold();
+      } catch (err) {
+        $('loading').textContent = err.message;
+      }
+    }
+
+    /* LIVE SEAT MAP: every 5 seconds re-read the taken seats and the booking (hold timer). */
+    async function liveRefresh() {
+      if (!show || document.hidden) return;
+      const mine = [...selected];
+      try {
+        const before = new Set(booked);
+        if (bookingId && booking && booking.status === 'PENDING_PAYMENT' && !holdExpired()) {
+          setBooking(await API.get('/api/customer/bookings/' + bookingId));
+        }
+        await loadShow();
+        const newlyTaken = [...booked].filter(c => !before.has(c));
+        const lost = mine.filter(c => !selected.has(c));
+        if (lost.length) toast('Seat ' + lost.join(', ') + (lost.length > 1 ? ' were' : ' was') + ' just taken by another customer', 'err');
+        else if (newlyTaken.length) toast('Seat map updated: ' + newlyTaken.join(', ') + ' taken', 'ok');
+        renderAll();
+      } catch (err) {
+        // 404: the hold ran out and the sweeper released the booking
+        if (err.status === 404 && booking) holdEndsAt = Date.now();
+      }
+    }
+
+    function updateHold() {
+      const box = $('holdBox');
+      if (!booking || booking.status !== 'PENDING_PAYMENT' || holdEndsAt === null) { box.classList.add('hidden'); return; }
+      box.classList.remove('hidden');
+      const left = Math.max(0, Math.round((holdEndsAt - Date.now()) / 1000));
+      if (left === 0) {
+        box.className = 'hold-box expired';
+        box.innerHTML = `Your seat hold has expired and the seats were released. <a href="booking.html?showId=${show.id}">Choose seats again</a>`;
+        renderActions(); renderPayment(); renderSeatMap();
+        return;
+      }
+      box.className = 'hold-box' + (left <= 120 ? ' warn' : '');
+      box.innerHTML = `Seats held for <strong>${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</strong>. Pay before the timer runs out.`;
+    }
+
+    /** Loads the showtime and works out which seats other customers hold. */
+    async function loadShow() {
+      show = await API.get('/api/shows/' + showId);
+      bands = show.seatBands || [];
+      const own = new Set(booking ? booking.seatCodes : []);
+      booked = new Set(show.bookedSeats.filter(code => !own.has(code)));
+      selected = new Set([...selected].filter(code => !booked.has(code)));
+    }
+
+    function isLocked() { return booking && booking.status !== 'PENDING_PAYMENT'; }
+    function isPast() { return new Date(show.startTime) <= new Date(); }
+    /** True when the customer's unpaid seat hold has run out (the server releases the seats soon after). */
+    function holdExpired() { return holdEndsAt !== null && booking && booking.status === 'PENDING_PAYMENT' && Date.now() >= holdEndsAt; }
+
+    /** Stores a booking from the server and starts the countdown from the server's secondsLeft. */
+    function setBooking(b) {
+      booking = b;
+      holdEndsAt = b && b.status === 'PENDING_PAYMENT' && b.secondsLeft >= 0 ? Date.now() + b.secondsLeft * 1000 : null;
+    }
+    function isDirty() {
+      if (!booking) return selected.size > 0;
+      return [...selected].sort().join(',') !== [...booking.seatCodes].sort().join(',');
+    }
+    function sortSeats(a, b) { return a[0].localeCompare(b[0]) || Number(a.slice(1)) - Number(b.slice(1)); }
+
+    function renderAll() {
+      document.title = show.movieTitle + ' · CineMax';
+      $('movieTitle').textContent = show.movieTitle;
+      $('backLink').href = 'movie.html?id=' + show.movieId;
+      $('showMeta').innerHTML = `${esc(show.theatreName)} · ${esc(show.screenName)} · ${fmtDateTime(show.startTime)} ${formatBadge(show.movieFormat)}`;
+      $('headerStatus').innerHTML = (booking ? statusBadge(booking.status) : '')
+        + ` <span class="live-indicator" title="The seat map refreshes every 5 seconds"><i></i>Live</span>`;
+      renderBandLegend();
+      renderSeatMap();
+      renderSummary();
+      renderActions();
+      renderPayment();
+    }
+
+    /* ---------- promo code ---------- */
+    async function applyPromo() {
+      const code = $('promoInput').value.trim();
+      const note = $('promoNote');
+      if (!code) { promo = null; renderSummary(); note.textContent = ''; return; }
+      const total = valueOf([...selected]) || Number(show.seatPrice);
+      try {
+        const check = await API.post('/api/customer/promo/check', { code, total });
+        promo = check;
+        note.textContent = check.message;
+        note.className = 'promo-note ' + (check.valid ? 'ok' : 'err');
+        if (check.valid) {
+          $('discountRow').classList.remove('hidden');
+          $('sDiscount').textContent = '− ' + money(check.discount);
+          $('sTotal').textContent = money(check.newTotal);
+          toast('Promo code applied');
+        } else {
+          renderSummary();
+          toast(check.message, 'err');
+        }
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+
+    /** The band of the row a seat sits in, from the bands the API returned for this showtime. */
+    function bandOf(code) {
+      const row = code.charAt(0);
+      const hit = bands.find(b => b.rows.split(',').map(x => x.trim()).some(part => {
+        const range = part.split('-');
+        return range.length === 2 ? row >= range[0] && row <= range[1] : part === row;
+      }));
+      return hit ? hit.band.toLowerCase() : 'regular';
+    }
+
+    /** Price of one seat: the band of its row decides it. */
+    function priceOf(code) {
+      const row = code.charAt(0);
+      const hit = bands.find(b => b.rows.split(',').map(x => x.trim()).some(part => {
+        const range = part.split('-');
+        return range.length === 2 ? row >= range[0] && row <= range[1] : part === row;
+      }));
+      return hit ? Number(hit.price) : Number(show.seatPrice);
+    }
+
+    function valueOf(seats) {
+      return seats.reduce((sum, code) => sum + priceOf(code), 0);
+    }
+
+    function renderBandLegend() {
+      const box = $('bandLegend');
+      if (!box) return;
+      box.innerHTML = bands.map(b => `<li><i style="background:${
+        b.band === 'VIP' ? 'var(--violet)' : b.band === 'PREMIUM' ? 'var(--accent-2)' : 'var(--panel-strong)'
+      }"></i><strong>${esc(b.label)}</strong> rows ${esc(b.rows)} · ${money(b.price)}</li>`).join('');
+    }
+
+    function renderSeatMap() {
+      const locked = isLocked() || isPast() || holdExpired();
+      const cols = show.seatsPerRow;
+      let html = '';
+      for (let r = 0; r < show.rowCount; r++) {
+        const letter = String.fromCharCode(65 + r);
+        html += `<div class="seat-row"><span class="row-label">${letter}</span>`;
+        for (let c = 1; c <= cols; c++) {
+          const code = letter + c;
+          const taken = booked.has(code);
+          const mine = selected.has(code);
+          const aisle = cols >= 8 && c === Math.floor(cols / 2) + 1 ? ' aisle' : '';
+          const cls = ['seat', mine ? 'selected' : '', taken ? 'booked' : '', aisle,
+                       'band-' + bandOf(code)].join(' ').trim();
+          html += `<button type="button" class="${cls}" data-code="${code}" title="${code}"
+                    ${taken || locked ? 'disabled' : ''}>${taken ? '' : c}</button>`;
+        }
+        html += `<span class="row-label">${letter}</span></div>`;
+      }
+      $('seatMap').innerHTML = html;
+      $('lockNote').textContent = holdExpired() ? 'Your seat hold has expired, so these seats were released.'
+        : isPast() ? 'This showtime has already started.'
+        : isLocked() ? 'This booking is ' + booking.status.toLowerCase().replace('_', ' ') + ' and can no longer be changed.'
+        : 'Click seats to select them. Up to 10 seats per booking.';
+    }
+
+    function renderSummary() {
+      const seats = [...selected].sort(sortSeats);
+      $('sTime').textContent = fmtDateTime(show.startTime);
+      $('sScreen').textContent = `${show.screenName} (${show.screenType.toLowerCase()})`;
+      $('sSeats').textContent = seats.length ? seats.join(', ') : 'None selected';
+      const seatValue = valueOf(seats);
+      $('sPrice').textContent = seats.length
+        ? money(seatValue / seats.length) + ' average (' + money(show.seatPrice) + ' base)'
+        : money(show.seatPrice) + ' + band';
+      $('sRule').textContent = show.pricingStrategy + (show.movieFormat !== 'STANDARD' ? ' + ' + (show.movieFormat === 'IMAX' ? 'IMAX' : '3D') + ' surcharge' : '');
+      const gross = booking && !isDirty() ? Number(booking.totalAmount) : seatValue;
+      $('sTotal').textContent = money(gross);
+      const applied = promo && promo.valid ? promo : null;
+      $('discountRow').classList.toggle('hidden', !applied);
+      if (applied) {
+        $('sDiscount').textContent = '− ' + money(applied.discount);
+      }
+    }
+
+    function renderActions() {
+      const area = $('actionArea');
+      $('togetherBtn').disabled = isLocked() || isPast() || holdExpired();
+      if (holdExpired()) {
+        area.innerHTML = `<p class="error-text">Your seat hold has expired. <a href="booking.html?showId=${show.id}">Choose seats again</a></p>`;
+        return;
+      }
+      if (isPast()) { area.innerHTML = '<p class="error-text">Booking closed: the show has started.</p>'; return; }
+      if (isLocked()) {
+        area.innerHTML = '<a class="btn btn-ghost btn-block" href="my-bookings.html">Back to my bookings</a>';
+        return;
+      }
+      const count = selected.size;
+      if (!booking) {
+        area.innerHTML = `<button class="btn btn-primary btn-block" id="mainBtn" ${count === 0 ? 'disabled' : ''}>Reserve ${count || ''} seat${count === 1 ? '' : 's'}</button>
+                          <p class="hint mt-1">Seats are held for you while you complete payment.</p>`;
+        $('mainBtn').addEventListener('click', reserve);
+      } else {
+        area.innerHTML = `<button class="btn btn-primary btn-block" id="mainBtn" ${count === 0 || !isDirty() ? 'disabled' : ''}>Save seat changes</button>`;
+        $('mainBtn').addEventListener('click', saveSeats);
+      }
+    }
+
+    /* CREATE booking (Member 5) */
+    async function reserve() {
+      try {
+        const body = { showId, seatCodes: [...selected] };
+        if (promo && promo.valid) body.promoCode = promo.code;
+        setBooking(await API.post('/api/customer/bookings', body));
+        bookingId = booking.id;
+        history.replaceState(null, '', 'booking.html?bookingId=' + bookingId);
+        toast('Seats reserved. Complete payment to confirm your booking.');
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+      await refreshAll();
+    }
+
+    /* UPDATE booking seats (Member 5) */
+    async function saveSeats() {
+      try {
+        setBooking(await API.put('/api/customer/bookings/' + bookingId, { seatCodes: [...selected] }));
+        toast('Seats updated');
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+      await refreshAll();
+    }
+
+    async function refreshAll() {
+      try {
+        if (bookingId) setBooking(await API.get('/api/customer/bookings/' + bookingId));
+        await loadShow();
+        renderAll();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+
+    /* Seats together: picks the first run of free adjacent seats, rows nearest the middle and seats nearest the centre first. */
+    function findTogether(count) {
+      const midRow = (show.rowCount - 1) / 2;
+      const midCol = (show.seatsPerRow + 1) / 2;
+      const rows = [...Array(show.rowCount).keys()].sort((a, b) => Math.abs(a - midRow) - Math.abs(b - midRow));
+      for (const r of rows) {
+        const letter = String.fromCharCode(65 + r);
+        let best = null;
+        for (let start = 1; start + count - 1 <= show.seatsPerRow; start++) {
+          const codes = Array.from({ length: count }, (_, i) => letter + (start + i));
+          if (codes.some(code => booked.has(code))) continue;
+          const score = Math.abs(start + (count - 1) / 2 - midCol);
+          if (!best || score < best.score) best = { codes, score };
+        }
+        if (best) return best.codes;
+      }
+      return null;
+    }
+
+    function fillTogetherOptions() {
+      $('togetherCount').innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
+      $('togetherCount').value = '2';
+    }
+
+    $('togetherBtn').addEventListener('click', () => {
+      const count = Number($('togetherCount').value);
+      const codes = findTogether(count);
+      if (!codes) {
+        toast(`No ${count} seats together are free for this showtime. Try fewer seats or another time.`, 'err');
+        return;
+      }
+      selected = new Set(codes);
+      renderSeatMap();
+      renderSummary();
+      renderActions();
+      toast(`Selected ${codes.join(', ')}`);
+    });
+
+    /* Seat map interaction */
+    $('seatMap').addEventListener('click', (e) => {
+      const btn = e.target.closest('.seat');
+      if (!btn || btn.disabled || isLocked() || isPast()) return;
+      const code = btn.dataset.code;
+      if (selected.has(code)) {
+        selected.delete(code);
+      } else {
+        if (selected.size >= 10) { toast('You can select up to 10 seats per booking', 'err'); return; }
+        selected.add(code);
+      }
+      renderSeatMap();
+      renderSummary();
+      renderActions();
+    });
+
+    /* ---------- Member 6: payment ---------- */
+    function renderPayment() {
+      const card = $('paymentCard');
+      if (!booking) { card.classList.add('hidden'); return; }
+      card.classList.remove('hidden');
+      if (booking.status === 'PENDING_PAYMENT') {
+        $('payForm').classList.remove('hidden');
+        $('receipt').classList.add('hidden');
+        updateMethodUI();
+        return;
+      }
+      $('payForm').classList.add('hidden');
+      showReceipt();
+    }
+
+    function updateMethodUI() {
+      const m = $('method').value;
+      const cfg = METHODS[m];
+      $('refLabel').textContent = cfg.label;
+      $('reference').placeholder = cfg.placeholder;
+      $('refHint').textContent = cfg.hint;
+      const fee = Math.round(Number(booking.totalAmount) * cfg.fee * 100) / 100;
+      $('feeText').textContent = money(fee);
+      $('payTotal').textContent = money(Number(booking.totalAmount) + fee);
+      $('payBtn').textContent = 'Pay ' + money(Number(booking.totalAmount) + fee);
+      $('payBtn').disabled = isDirty() || isPast() || holdExpired();
+      $('payError').textContent = isDirty() ? 'Save your seat changes before paying.' : '';
+    }
+
+    async function showReceipt() {
+      const box = $('receipt');
+      box.classList.remove('hidden');
+      try {
+        const payments = await API.get('/api/customer/payments');
+        const p = payments.find(x => x.bookingId === booking.id);
+        box.innerHTML = `
+          <div class="stack">
+            <span class="badge badge-ok" style="justify-self:start">✔ Booking confirmed</span>
+            <div class="summary-row"><span class="k">Booking reference</span><strong>${esc(booking.reference)}</strong></div>
+            ${p ? `
+            <div class="summary-row"><span class="k">Transaction</span><span>${esc(p.transactionRef)}</span></div>
+            <div class="summary-row"><span class="k">Paid with</span><span>${esc(p.description)}</span></div>
+            <div class="summary-row"><span class="k">Amount charged</span><span>${money(p.amount)}</span></div>
+            <div class="summary-row"><span class="k">Status</span><span>${statusBadge(p.status)}</span></div>` : ''}
+            <div class="ticket-qr">
+              <img src="/api/customer/bookings/${booking.id}/qr.png" width="160" height="160" alt="Ticket QR code for ${esc(booking.reference)}">
+              <small>Scan this at the entrance</small>
+            </div>
+            <a class="btn btn-primary btn-block" href="/api/customer/bookings/${booking.id}/ticket.pdf">Download ticket (PDF)</a>
+            <a class="btn btn-ghost btn-block" href="my-bookings.html">View my bookings</a>
+          </div>`;
+      } catch (err) {
+        box.innerHTML = `<p>Booking ${esc(booking.reference)} is confirmed.</p>`;
+      }
+    }
+
+    $('method').addEventListener('change', updateMethodUI);
+
+    $('payBtn').addEventListener('click', async () => {
+      $('payError').textContent = '';
+      $('payBtn').disabled = true;
+      try {
+        await API.post('/api/customer/payments', {
+          bookingId: booking.id,
+          method: $('method').value,
+          reference: $('reference').value.trim()
+        });
+        toast('Payment successful. Your seats are confirmed!');
+        await refreshAll();
+      } catch (err) {
+        $('payError').textContent = err.message;
+        $('payBtn').disabled = false;
+      }
+    });
+
+    /* promo controls */
+    $('promoApply').addEventListener('click', applyPromo);
+    $('promoInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); applyPromo(); }
+    });
+    $('promoInput').addEventListener('input', () => {
+      $('promoNote').textContent = '';
+      $('promoNote').className = 'promo-note';
+    });
+
+    init();
+  </script>
+</body>
+</html>

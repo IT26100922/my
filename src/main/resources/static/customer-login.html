@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Log in to your CineMax account to book tickets.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Log in · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <main class="auth-wrap">
+    <div class="card auth-card">
+      <span class="badge badge-std tag">Customer account</span>
+      <h1>Welcome back</h1>
+      <p>Log in to book seats, pay and manage your tickets.</p>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" required placeholder="you@example.com" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" required autocomplete="current-password">
+        </div>
+        <div class="error-text" id="error"></div>
+        <button class="btn btn-primary btn-block" id="submitBtn" type="submit">Log in</button>
+      </form>
+
+      <div class="auth-foot">
+        <p style="margin:0">New to CineMax? <a href="customer-register.html">Create an account</a></p>
+        <p style="margin:0">Staff member? <a href="admin-login.html">Staff login</a></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 1 (User & Authentication) UI: customer login */
+    renderNav('');
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = document.getElementById('error');
+      const button = document.getElementById('submitBtn');
+      error.textContent = '';
+      button.disabled = true;
+      try {
+        await API.post('/api/auth/customer/login', {
+          email: document.getElementById('email').value.trim(),
+          password: document.getElementById('password').value
+        });
+        window.location.href = nextPage('index.html');
+      } catch (err) {
+        error.textContent = err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

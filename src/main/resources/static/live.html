@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live database · CineMax</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <style>
+    :root {
+      --bg: #08070d; --panel: #101019; --panel-2: #16161f; --line: rgba(255,255,255,.10);
+      --text: #f6f5fa; --muted: #a2a1b6; --accent: #f84464; --ok: #3ddc97; --warn: #f5a524; --info: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 26px 26px 44px; color: var(--text);
+      font: 14px/1.5 "Inter var", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(700px 460px at 92% -8%, rgba(248,68,100,.30), transparent 68%),
+        radial-gradient(600px 480px at 2% 6%, rgba(139,124,246,.16), transparent 66%),
+        var(--bg);
+    }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    h1 { font-size: 26px; margin: 0; letter-spacing: -.035em; font-weight: 850; }
+    h1 small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 3px; }
+    .controls { display: flex; align-items: center; gap: 10px; }
+    button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      padding: 7px 13px; border-radius: 8px; font-size: 13px; cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }
+    .dot.stale { background: var(--warn); }
+    .dot.off { background: var(--accent); }
+    .pulse { animation: p 1s ease-in-out infinite; }
+    @keyframes p { 50% { opacity: .3; } }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+    .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 10px; }
+    .card.wide { grid-column: 1 / -1; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+         letter-spacing: .05em; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+    td { padding: 6px 8px; border-bottom: 1px solid #20202c; }
+    tr:last-child td { border-bottom: 0; }
+    .num { font-variant-numeric: tabular-nums; text-align: right; }
+    .mono { font-family: Consolas, ui-monospace, monospace; font-size: 12px; }
+    .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .chip.CONFIRMED, .chip.SUCCESS { background: rgba(55,214,122,.15); color: var(--ok); }
+    .chip.PENDING_PAYMENT { background: rgba(255,176,32,.15); color: var(--warn); }
+    .chip.CANCELLED, .chip.REFUNDED, .chip.PARTIALLY_REFUNDED { background: rgba(248,68,100,.15); color: var(--accent); }
+    .changed { animation: flash .9s ease-out; }
+    @keyframes flash { from { background: rgba(248,68,100,.22); } to { background: transparent; } }
+    .kpi { display: flex; gap: 10px; flex-wrap: wrap; }
+    .kpi div { background: var(--panel-2); border-radius: 9px; padding: 8px 13px; min-width: 104px; }
+    .kpi b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+    .kpi span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    .note { color: var(--muted); font-size: 12px; }
+    a { color: var(--info); }
+    .banner { display: none; background: rgba(248,68,100,.12); border: 1px solid rgba(248,68,100,.45);
+              border-radius: 10px; padding: 12px 15px; margin-top: 16px; }
+    .banner.show { display: block; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Live database
+    <small id="sub">reading straight from MySQL</small>
+  </h1>
+  <div class="controls">
+    <span class="note"><span class="dot pulse" id="dot"></span> <span id="status">connecting…</span></span>
+    <button id="toggle">Pause</button>
+    <button id="now">Refresh now</button>
+    <a href="/admin-dashboard.html"><button type="button">Back to admin</button></a>
+  </div>
+</header>
+
+<div class="banner" id="banner">
+  <b>Admin session required.</b> <a href="/admin-login.html">Log in as an admin</a>, then come back to this page.
+  It reads <span class="mono">/api/admin/live</span>, which only admins may call.
+</div>
+
+<section class="card wide" style="margin-top:16px">
+  <h2>Connected to</h2>
+  <div id="conn" class="mono note">…</div>
+</section>
+
+<div class="grid">
+  <section class="card wide">
+    <h2>Rows in each table</h2>
+    <div class="kpi" id="kpi"></div>
+  </section>
+
+  <section class="card wide">
+    <h2>Latest bookings</h2>
+    <table>
+      <thead><tr><th>Reference</th><th>Customer</th><th>Movie</th><th class="num">Seats</th>
+        <th class="num">Total</th><th>Status</th><th>Created</th></tr></thead>
+      <tbody id="bookings"><tr><td colspan="7" class="note">No bookings yet — make one in the customer portal and watch it appear.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Latest payments</h2>
+    <table>
+      <thead><tr><th>Transaction</th><th>Method</th><th class="num">Amount</th><th class="num">Fee</th><th>Status</th></tr></thead>
+      <tbody id="payments"><tr><td colspan="5" class="note">No payments yet.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Newest movies</h2>
+    <table>
+      <thead><tr><th class="num">Id</th><th>Title</th><th>Genre</th><th>Format</th><th class="num">Min</th></tr></thead>
+      <tbody id="movies"><tr><td colspan="5" class="note">Nothing yet.</td></tr></tbody>
+    </table>
+  </section>
+</div>
+
+<p class="note" style="margin-top:18px">
+  This page polls <span class="mono">/api/admin/live</span> every 2 seconds. Rows that arrive or change flash pink.
+  MySQL Workbench shows a snapshot — you have to re-run the query there. This is the same data, refreshed for you.
+</p>
+
+<script src="js/i18n.js?v=6"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = (v) => 'LKR ' + Number(v ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 });
+  const big = (v) => Number(v ?? 0).toLocaleString('en-LK');
+
+  let running = true;
+  let timer = null;
+  let previous = {};          // table -> last row signature, to flash changed rows
+
+  async function tick() {
+    try {
+      const res = await fetch('/api/admin/live', { headers: { Accept: 'application/json' } });
+      if (res.status === 401 || res.status === 403) {
+        $('banner').classList.add('show');
+        setStatus('not signed in as admin', 'off');
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      $('banner').classList.remove('show');
+      render(d);
+      setStatus('live · updated ' + d.serverTime, 'ok');
+    } catch (e) {
+      setStatus('cannot reach the app — ' + e.message, 'off');
+    }
+  }
+
+  function setStatus(text, kind) {
+    $('status').textContent = text;
+    const dot = $('dot');
+    dot.className = 'dot' + (kind === 'ok' ? ' pulse' : kind === 'off' ? ' off' : ' stale');
+  }
+
+  function render(d) {
+    const c = d.database || {};
+    $('conn').innerHTML =
+      'schema <b>' + esc(c.schema) + '</b> · ' + esc(c.product) +
+      ' · user <b>' + esc(c.user) + '</b> · isolation <b>' + esc(c.isolation) + '</b><br>' +
+      '<span style="opacity:.75">' + esc(c.url) + '</span>';
+    $('sub').textContent = 'database ' + (c.schema || '?') + ' · refreshed every 2 s';
+
+    // counts
+    $('kpi').innerHTML = d.counts.map((r) =>
+        '<div><span>' + esc(r.table_name) + '</span><b>' + big(r.rows_in_table) + '</b></div>').join('');
+
+    // bookings
+    const bookings = d.bookings || [];
+    $('bookings').innerHTML = bookings.length ? bookings.map((b) => {
+      const sig = JSON.stringify(b);
+      const isNew = previous['b:' + b.reference] !== undefined && previous['b:' + b.reference] !== sig;
+      previous['b:' + b.reference] = sig;
+      return '<tr class="' + (isNew ? 'changed' : '') + '">' +
+        '<td class="mono">' + esc(b.reference) + '</td>' +
+        '<td>' + esc(b.customer) + '</td>' +
+        '<td>' + esc(b.movie) + '</td>' +
+        '<td class="num">' + big(b.seats) + '</td>' +
+        '<td class="num">' + money(b.total_amount) + '</td>' +
+        '<td><span class="chip ' + esc(b.status) + '">' + esc(b.status) + '</span></td>' +
+        '<td class="mono">' + esc(b.created) + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="note">No bookings yet — make one in the customer portal and watch it appear.</td></tr>';
+
+    // payments
+    const pays = d.payments || [];
+    $('payments').innerHTML = pays.length ? pays.map((p) =>
+        '<tr><td class="mono">' + esc(p.transaction_ref) + '</td>' +
+        '<td>' + esc(p.method) + '</td>' +
+        '<td class="num">' + money(p.amount) + '</td>' +
+        '<td class="num">' + money(p.convenience_fee) + '</td>' +
+        '<td><span class="chip ' + esc(p.status) + '">' + esc(p.status) + '</span></td></tr>').join('')
+      : '<tr><td colspan="5" class="note">No payments yet.</td></tr>';
+
+    // movies
+    const movies = d.movies || [];
+    $('movies').innerHTML = movies.length ? movies.map((m) =>
+        '<tr><td class="num">' + big(m.id) + '</td><td>' + esc(m.title) + '</td>' +
+        '<td>' + esc(m.genre) + '</td><td>' + esc(m.movie_format) + '</td>' +
+        '<td class="num">' + big(m.duration_minutes) + '</td></tr>').join('')
+      : '<tr><td colspan="5" class="note">Nothing yet.</td></tr>';
+  }
+
+  function loop() {
+    clearInterval(timer);
+    if (running) timer = setInterval(tick, 2000);
+  }
+
+  $('toggle').onclick = () => {
+    running = !running;
+    $('toggle').textContent = running ? 'Pause' : 'Resume';
+    if (running) { tick(); loop(); } else { clearInterval(timer); setStatus('paused', 'stale'); }
+  };
+  $('now').onclick = tick;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearInterval(timer); else if (running) { tick(); loop(); }
+  });
+
+  tick();
+  loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Book movie tickets in Negombo and Colombo. See what is showing, pick your seats and pay online.">
+  <meta name="theme-color" content="#08070d">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>CineMax · Movies, showtimes and tickets</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+
+  <!-- Hero banner: rotates through the featured films -->
+  <section class="banner hidden" id="banner" aria-roledescription="carousel" aria-label="Featured movies">
+    <div id="bannerTrack"></div>
+    <div class="banner-floor" aria-hidden="true"></div>
+    <div class="banner-controls">
+      <button class="banner-arrow" type="button" id="bannerPrev" aria-label="Previous movie">‹</button>
+      <div class="banner-dots" id="bannerDots"></div>
+      <button class="banner-arrow" type="button" id="bannerNext" aria-label="Next movie">›</button>
+      <span class="banner-count" id="bannerCount"><b>01</b> / 05</span>
+    </div>
+  </section>
+
+  <main class="container">
+    <section class="finder">
+      <h1 data-i18n="home.title">Now showing in Negombo &amp; Colombo</h1>
+      <p data-i18n="home.lead">Find a film, pick a showtime and choose your seats. Results update as you type.</p>
+      <form class="searchbar filter-bar" id="searchForm" role="search">
+        <input type="search" id="titleInput" placeholder="Search movies by title…" data-i18n-placeholder="finder.search" aria-label="Movie title">
+        <select id="genreInput" aria-label="Genre"><option value="" data-i18n="finder.genre">All genres</option></select>
+        <select id="formatInput" aria-label="Format"><option value="" data-i18n="finder.format">All formats</option></select>
+        <select id="languageInput" aria-label="Language"><option value="" data-i18n="finder.language">Any language</option></select>
+        <select id="sortInput" aria-label="Sort by">
+          <option value="title">Title A–Z</option>
+          <option value="newest">Newest release</option>
+          <option value="duration">Shortest first</option>
+        </select>
+        <button class="btn btn-primary" type="submit" data-i18n="finder.submit">Search</button>
+        <button class="btn btn-ghost" type="button" id="clearBtn" data-i18n="finder.clear">Clear</button>
+      </form>
+    </section>
+
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">In the cinema now</p>
+        <h2 data-i18n="section.movies">Movies</h2>
+        <p id="resultCount">Loading movies…</p>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="theatres.html">Theatres &amp; screens →</a>
+    </div>
+
+    <div class="grid movie-grid" id="movieGrid"></div>
+    <div class="empty card hidden" id="emptyState">
+      <p style="margin:0 0 .8rem">Nothing matches those filters. Try a different title or clear the filters.</p>
+      <button class="btn btn-ghost btn-sm" type="button" id="emptyClear">Clear filters</button>
+    </div>
+
+    <!-- A printed ticker, like the strip above a cinema entrance -->
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span class="ticker-item">IMAX +300</span>
+        <span class="ticker-item">3D +200</span>
+        <span class="ticker-item">Premium screens</span>
+        <span class="ticker-item">VIP lounge seats</span>
+        <span class="ticker-item">Negombo</span>
+        <span class="ticker-item">Colombo</span>
+        <span class="ticker-item">QR e-ticket</span>
+        <span class="ticker-item">1 loyalty point per seat</span>
+        <span class="ticker-item">IMAX +300</span>
+        <span class="ticker-item">3D +200</span>
+        <span class="ticker-item">Premium screens</span>
+        <span class="ticker-item">VIP lounge seats</span>
+        <span class="ticker-item">Negombo</span>
+        <span class="ticker-item">Colombo</span>
+        <span class="ticker-item">QR e-ticket</span>
+        <span class="ticker-item">1 loyalty point per seat</span>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Why book here</p>
+        <h2>Three things you can count on</h2>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="terms.html">Read the ticket rules →</a>
+    </div>
+
+    <div class="reason-grid">
+      <article class="card reason">
+        <span class="reason-num">01</span>
+        <span class="reason-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4"/><path d="M4 10h16a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"/><path d="M7 16v4M17 16v4"/></svg></span>
+        <h3>Seats held while you pay</h3>
+        <p>Choosing a seat reserves it for 10 minutes. If the payment does not finish, the hold expires
+          and the seat goes back on sale for everyone else.</p>
+      </article>
+      <article class="card reason">
+        <span class="reason-num">02</span>
+        <span class="reason-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h11a4 4 0 0 1 0 8H9"/><path d="M8 5 4 9l4 4"/></svg></span>
+        <h3>Refunds follow a written rule</h3>
+        <p>Cancel more than 24 hours before the show for a full refund, between 2 and 24 hours for half.
+          The amount is shown before you confirm.</p>
+      </article>
+      <article class="card reason">
+        <span class="reason-num">03</span>
+        <span class="reason-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 0 2-2V6h14v1a2 2 0 0 0 2 2v6a2 2 0 0 0-2 2v1H5v-1a2 2 0 0 0-2-2Z"/><path d="M12 8v1M12 12v1M12 16v1"/></svg></span>
+        <h3>Your ticket in your pocket</h3>
+        <p>Every confirmed booking gets a QR e-ticket plus reminders 24 hours and 2 hours before the
+          film starts, so nobody turns up at the wrong screen.</p>
+      </article>
+    </div>
+
+    <section class="cta-band">
+      <div>
+        <p class="eyebrow">Two cinemas · six screens</p>
+        <h2>Your seat is already<br>in the dark, waiting.</h2>
+        <p>Browse what is showing tonight, pick a screen and we will keep the seat until you are done.</p>
+        <div class="cta-row mt-2">
+          <a class="btn btn-primary" href="#movieGrid">Browse movies</a>
+          <a class="btn btn-ghost" href="theatres.html">See the screens</a>
+        </div>
+      </div>
+      <div class="cta-perf" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </section>
+  </main>
+
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 2 (Movie Catalogue) UI: search, filters and poster grid.
+       The filters live in the page address (?title=…&genre=…), so a search can be shared or bookmarked. */
+    const FILTERS = {
+      title: 'titleInput', genre: 'genreInput', format: 'formatInput', language: 'languageInput', sort: 'sortInput'
+    };
+    const LABELS = { genre: 'genre', format: 'format', language: 'language' };
+    let searchTimer = null;
+
+    function posterHtml(movie) {
+      const badge = `<div class="badge-row">${formatBadge(movie.format)}<span class="badge">${esc(movie.rating || 'NR')}</span></div>`;
+      const inner = movie.posterUrl
+        ? `<img src="${esc(movie.posterUrl)}" alt="${esc(movie.title)}">`
+        : `<span class="initial">${esc(movie.title.charAt(0))}</span>`;
+      const hover = `<div class="poster-hover" aria-hidden="true">
+        <strong>${esc(movie.genre)}</strong>
+        <small>${movie.durationMinutes} min · ${esc(movie.language)}</small>
+        <span class="btn btn-primary btn-sm">Book now</span>
+      </div>`;
+      return `<div class="poster">${inner}${badge}${hover}</div>`;
+    }
+
+    /** Placeholder cards shown while the catalogue loads. */
+    function skeletonCards(count) {
+      return Array.from({ length: count }, () => `
+        <div class="card movie-card skeleton-card" aria-hidden="true">
+          <div class="skel-poster shimmer"></div>
+          <div class="movie-body">
+            <div class="skel-line wide shimmer"></div>
+            <div class="skel-line short shimmer"></div>
+          </div>
+        </div>`).join('');
+    }
+
+    /* ---------- featured banner: rotates through the first few movies ---------- */
+    const FORMAT_SHORT = { STANDARD: '2D', IMAX: 'IMAX', THREE_D: '3D' };
+    const BANNER = { index: 0, count: 0, timer: null, paused: false };
+
+    function showBannerSlide(i) {
+      const slides = document.querySelectorAll('.banner-slide');
+      if (!slides.length) return;
+      BANNER.index = (i + slides.length) % slides.length;
+      slides.forEach((el, n) => el.classList.toggle('active', n === BANNER.index));
+      const counter = document.getElementById('bannerCount');
+      if (counter) {
+        const pad = v => String(v).padStart(2, '0');
+        counter.innerHTML = `<b>${pad(BANNER.index + 1)}</b> / ${pad(slides.length)}`;
+      }
+      document.querySelectorAll('.banner-dot').forEach((el, n) => {
+        el.classList.toggle('active', n === BANNER.index);
+        el.setAttribute('aria-current', n === BANNER.index ? 'true' : 'false');
+      });
+    }
+
+    function startBannerTimer() {
+      clearInterval(BANNER.timer);
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (BANNER.count < 2 || BANNER.paused || still) return;
+      BANNER.timer = setInterval(() => showBannerSlide(BANNER.index + 1), 6000);
+    }
+
+    async function loadBanner() {
+      let movies;
+      try { movies = await API.get('/api/movies'); } catch (err) { return; }
+      const featured = movies.slice(0, 5);
+      if (!featured.length) return;
+      document.getElementById('bannerTrack').innerHTML = featured.map((m, i) => `
+        <!-- no aria-label here: the link's own text (title, meta, "Book tickets", the price tag) names it.
+             A hand-written label that did not repeat that text failed axe's label-content-name-mismatch rule. -->
+        <a class="banner-slide ${i === 0 ? 'active' : ''}" href="movie.html?id=${m.id}">
+          ${m.posterUrl
+            ? `<img class="banner-art" src="${esc(m.posterUrl)}" alt="">`
+            : `<div class="banner-art banner-art-fallback" data-initial="${esc(m.title.charAt(0))}"></div>`}
+          <div class="banner-shade"></div>
+          <div class="banner-info">
+            <span class="banner-eyebrow">Featured · ${esc(FORMAT_SHORT[m.format] || m.format)}</span>
+            <h2>${esc(m.title)}</h2>
+            <p class="banner-meta">
+              <span>${esc(m.genre)}</span><em>·</em><span>${m.durationMinutes} min</span><em>·</em><span>${esc(m.language)}</span>
+              <span class="banner-rating">${esc(m.rating || 'NR')}</span>
+            </p>
+            <span class="btn btn-primary btn-sm">Book tickets →</span>
+          </div>
+          <div class="banner-poster-wrap">
+            <span class="banner-seatpill"><i aria-hidden="true"></i>Seats live</span>
+            <div class="banner-poster-frame">
+              <span class="banner-ring" aria-hidden="true"></span>
+              <div class="banner-poster">${m.posterUrl
+                ? `<img src="${esc(m.posterUrl)}" alt="">`
+                : `<span class="initial">${esc(m.title.charAt(0))}</span>`}</div>
+            </div>
+            <span class="banner-stub"><span>From</span><strong>LKR 1,500</strong></span>
+          </div>
+        </a>`).join('');
+      document.getElementById('bannerDots').innerHTML = featured.map((m, i) =>
+        `<button class="banner-dot ${i === 0 ? 'active' : ''}" type="button" data-slide="${i}" aria-label="Show ${esc(m.title)}"></button>`).join('');
+      BANNER.count = featured.length;
+      document.getElementById('banner').classList.remove('hidden');
+      showBannerSlide(0);
+      startBannerTimer();
+    }
+
+    function stepBanner(delta) {
+      showBannerSlide(BANNER.index + delta);
+      startBannerTimer();
+    }
+
+    document.getElementById('bannerPrev').addEventListener('click', () => stepBanner(-1));
+    /* arrow keys browse the films, the way the reference site does it */
+    document.addEventListener('keydown', e => {
+      const banner = document.getElementById('banner');
+      if (!banner || banner.classList.contains('hidden')) return;
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (e.key === 'ArrowLeft') stepBanner(-1);
+      if (e.key === 'ArrowRight') stepBanner(1);
+    });
+    document.getElementById('bannerNext').addEventListener('click', () => stepBanner(1));
+    document.getElementById('bannerDots').addEventListener('click', e => {
+      const dot = e.target.closest('[data-slide]');
+      if (dot) { showBannerSlide(Number(dot.dataset.slide)); startBannerTimer(); }
+    });
+    const bannerEl = document.getElementById('banner');
+    bannerEl.addEventListener('mouseenter', () => { BANNER.paused = true; clearInterval(BANNER.timer); });
+    bannerEl.addEventListener('mouseleave', () => { BANNER.paused = false; startBannerTimer(); });
+
+    function readFilters() {
+      const out = {};
+      for (const [key, id] of Object.entries(FILTERS)) out[key] = document.getElementById(id).value.trim();
+      return out;
+    }
+
+    function writeFilters(values) {
+      for (const [key, id] of Object.entries(FILTERS)) {
+        if (values[key] !== undefined) document.getElementById(id).value = values[key];
+      }
+    }
+
+    /** Keeps the address bar in step with the filters (default sort is left out to keep the URL short). */
+    function syncAddress(filters) {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) {
+        if (value && !(key === 'sort' && value === 'title')) params.set(key, value);
+      }
+      const query = params.toString();
+      history.replaceState(null, '', query ? '?' + query : window.location.pathname);
+    }
+
+    /** Fills the dropdowns from the catalogue, keeping the first "All …" option. */
+    async function loadFilterOptions() {
+      const options = await API.get('/api/movies/filters');
+      const fill = (id, values, labelOf = v => v) => {
+        const select = document.getElementById(id);
+        const first = select.options[0];
+        select.innerHTML = '';
+        select.appendChild(first);
+        values.forEach(v => select.appendChild(new Option(labelOf(v), v)));
+      };
+      const FORMAT_LABELS = { STANDARD: '2D', IMAX: 'IMAX', THREE_D: '3D' };
+      fill('genreInput', options.genres);
+      fill('formatInput', options.formats, v => FORMAT_LABELS[v] || v);
+      fill('languageInput', options.languages);
+    }
+
+    function describeFilters(f) {
+      const parts = [];
+      if (f.title) parts.push(`title “${f.title}”`);
+      for (const key of Object.keys(LABELS)) if (f[key]) parts.push(`${LABELS[key]}: ${f[key]}`);
+      return parts.length ? ' for ' + parts.join(', ') : '';
+    }
+
+    async function loadMovies() {
+      const filters = readFilters();
+      syncAddress(filters);
+      const grid = document.getElementById('movieGrid');
+      grid.innerHTML = skeletonCards(6);
+      try {
+        const movies = await API.get('/api/movies?' + new URLSearchParams(filters).toString());
+        const n = movies.length;
+        document.getElementById('resultCount').textContent =
+          `${n} movie${n === 1 ? '' : 's'} found${describeFilters(filters)}`;
+        document.getElementById('emptyState').classList.toggle('hidden', n > 0);
+        grid.innerHTML = movies.map((m, i) => `
+          <a class="card movie-card fade-up" style="--i:${i}" href="movie.html?id=${m.id}">
+            ${posterHtml(m)}
+            <div class="movie-body">
+              <h3>${esc(m.title)}</h3>
+            </div>
+          </a>`).join('');
+      } catch (err) {
+        grid.innerHTML = '';
+        toast(err.message, 'err');
+      }
+    }
+
+    function clearFilters() {
+      writeFilters({ title: '', genre: '', format: '', language: '', sort: 'title' });
+      loadMovies();
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', e => { e.preventDefault(); loadMovies(); });
+    document.getElementById('clearBtn').addEventListener('click', clearFilters);
+    document.getElementById('emptyClear').addEventListener('click', clearFilters);
+    document.getElementById('titleInput').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadMovies, 300);
+    });
+    ['genreInput', 'formatInput', 'languageInput', 'sortInput'].forEach(id =>
+      document.getElementById(id).addEventListener('change', loadMovies));
+
+    document.getElementById('movieGrid').innerHTML = skeletonCards(6);
+    renderNav('movies');
+    loadBanner();
+    (async () => {
+      try {
+        await loadFilterOptions();
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+      const fromUrl = {};
+      for (const key of Object.keys(FILTERS)) {
+        const value = new URLSearchParams(window.location.search).get(key);
+        if (value !== null) fromUrl[key] = value;
+      }
+      writeFilters(fromUrl);
+      loadMovies();
+    })();
+  </script>
+</body>
+</html>

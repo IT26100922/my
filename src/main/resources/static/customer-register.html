@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Create a free CineMax account to book tickets and earn loyalty points.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Create account · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <header id="topbar" class="topbar"></header>
+  <main class="auth-wrap">
+    <div class="card auth-card">
+      <span class="badge badge-ok tag">New customer</span>
+      <h1>Create your account</h1>
+      <p>Join CineMax to book tickets and earn loyalty points on every seat.</p>
+      <form id="registerForm" novalidate>
+        <div class="field">
+          <label for="fullName">Full name</label>
+          <input id="fullName" required maxlength="100" autocomplete="name">
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" required maxlength="150" autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="phone">Phone (optional)</label>
+          <input id="phone" maxlength="20" autocomplete="tel">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" required minlength="8" maxlength="60" autocomplete="new-password">
+          <span class="hint">At least 8 characters.</span>
+        </div>
+        <div class="error-text" id="error"></div>
+        <button class="btn btn-primary btn-block" id="submitBtn" type="submit">Create account</button>
+      </form>
+      <div class="auth-foot">
+        <p style="margin:0">Already registered? <a href="customer-login.html">Log in</a></p>
+      </div>
+    </div>
+  </main>
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Member 1 (User & Authentication) UI: customer registration (CREATE), then automatic login */
+    renderNav('');
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = document.getElementById('error');
+      const button = document.getElementById('submitBtn');
+      error.textContent = '';
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      button.disabled = true;
+      try {
+        await API.post('/api/auth/customer/register', {
+          fullName: document.getElementById('fullName').value.trim(),
+          email,
+          password,
+          phone: document.getElementById('phone').value.trim() || null
+        });
+        await API.post('/api/auth/customer/login', { email, password });
+        toast('Account created. Welcome to CineMax!');
+        window.location.href = nextPage('index.html');
+      } catch (err) {
+        error.textContent = err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

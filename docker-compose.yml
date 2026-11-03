@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# The whole system with one command:   docker compose up --build
+#   db  - MySQL 8.4 with the schema from database/cinemax_mysql_setup.sql
+#   app - the Spring Boot application on http://localhost:8080
+# The application waits until MySQL answers, then imports the sample rows itself.
+# ---------------------------------------------------------------------------
+services:
+  db:
+    image: mysql:8.4
+    container_name: cinemax-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "0000"
+      MYSQL_DATABASE: movie_booking
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - cinemax-data:/var/lib/mysql
+      # Runs once, on an empty data directory: tables + the three import tables with sample rows.
+      - ./database/cinemax_mysql_setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p0000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: cinemax-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: movie_booking
+      DB_USER: root
+      DB_PASS: "0000"
+      # Swagger UI and the OpenAPI document are on by default; switch them off for a public deployment.
+      SPRINGDOC_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - cinemax-data-files:/app/data
+
+volumes:
+  cinemax-data:
+  cinemax-data-files:

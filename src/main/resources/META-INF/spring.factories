@@ -1,0 +1,6 @@
+# Spring Boot reads this file at startup. A failure analyzer turns the exception thrown while starting into
+# a short message with the fix in it, instead of a stack trace nobody reads.
+# සිංහල: ආරම්භයේදී ඇතිවන දෝෂ දිගු ලැයිස්තුවක් වෙනුවට කෙටි, ප්‍රයෝජනවත් පණිවිඩයක් ලෙස පෙන්වයි.
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+com.moviebooking.config.diagnostics.DatabaseUnreachableFailureAnalyzer,\
+com.moviebooking.config.diagnostics.DatabaseLoginFailureAnalyzer

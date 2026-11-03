@@ -1,0 +1,7 @@
+target/
+.git/
+.github/
+ui-shots/
+backups/
+*.zip
+docs/presentation/

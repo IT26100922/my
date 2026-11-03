@@ -1,0 +1,24 @@
+# Build output
+target/
+*.class
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Local database and generated reports (created at runtime)
+data/*.db
+data/*.trace.db
+data/*.lock.db
+data/reports/
+
+# Logs
+*.log
+
+# Browser-check screenshots (scripts/ui-check.py)
+ui-shots/
+
+# Simulated customer email output (created at runtime)
+data/outbox/

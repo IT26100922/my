@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Scan a CineMax ticket at the door and see who is inside.">
+  <meta name="theme-color" content="#f84464">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>Door check-in · CineMax</title>
+  <script>(function(){try{var t=localStorage.getItem('cinemax-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+  <link rel="stylesheet" href="css/style.css?v=10">
+  <link rel="stylesheet" href="css/fonts.css?v=1">
+  <link rel="stylesheet" href="css/studio.css?v=5">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <a class="brand" href="index.html"><img class="logo-img" src="/img/logo.svg" alt=""><span>CineMax Admin</span></a>
+      <nav class="side-nav">
+        <a class="side-link" href="admin-dashboard.html"><span>←</span><span>Dashboard</span></a>
+      </nav>
+      <div class="sidebar-foot">
+        <a class="btn btn-ghost btn-sm" href="live.html">Live database</a>
+        <a class="btn btn-ghost btn-sm" href="index.html">View public site</a>
+        <button class="btn btn-ghost btn-sm theme-toggle" id="themeToggle" type="button"></button>
+        <button class="btn btn-danger btn-sm" id="logoutBtn">Log out</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="toolbar">
+        <div>
+          <h1>Door check-in</h1>
+          <p class="muted">Scan or type the ticket code. One answer per scan: in, already in, or why not.</p>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <section class="card scan-card">
+          <h2>Scan a ticket</h2>
+          <form id="scanForm" autocomplete="off">
+            <label class="sr-only" for="scanInput">Ticket code</label>
+            <input id="scanInput" placeholder="BK1A2B3C4D or scan the QR code" class="scan-input">
+            <button class="btn btn-primary btn-block mt-2" type="submit">Check ticket</button>
+          </form>
+          <p class="hint" style="margin:.6rem 0 0">A USB barcode scanner types the code and presses Enter, so the
+            field keeps the focus. Scans are recorded against your staff name.</p>
+          <div id="scanResult" class="scan-result hidden" role="status" aria-live="polite"></div>
+        </section>
+
+        <aside class="stack">
+          <section class="card">
+            <h2>Today</h2>
+            <div class="grid kpi-grid">
+              <div class="card kpi"><span class="num" id="todayExpected">0</span><span class="lbl">expected</span>
+                <span class="kpi-hint">paid tickets for today</span></div>
+              <div class="card kpi"><span class="num" id="todayIn">0</span><span class="lbl">checked in</span>
+                <span class="kpi-hint">scanned at the door</span></div>
+              <div class="card kpi"><span class="num" id="todayNoShows">0</span><span class="lbl">no-shows</span>
+                <span class="kpi-hint">started, never scanned</span></div>
+              <div class="card kpi"><span class="num" id="todayPercent">0%</span><span class="lbl">attendance</span>
+                <span class="kpi-hint">checked in / expected</span></div>
+            </div>
+          </section>
+          <section class="card">
+            <h2>Last scans</h2>
+            <ul class="scan-list" id="recentScans"><li class="muted">Nothing scanned yet today.</li></ul>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-wrap"></div>
+
+  <script src="js/i18n.js?v=6"></script>
+  <script src="js/common.js?v=7"></script>
+  <script>
+    /* Door check-in page: one input, one endpoint, one answer out of seven. */
+    const RESULT_STYLE = {
+      OK: { cls: 'ok', title: 'Welcome in', icon: '✓' },
+      ALREADY_USED: { cls: 'err', title: 'Already scanned', icon: '!' },
+      CANCELLED: { cls: 'err', title: 'Cancelled booking', icon: '×' },
+      NOT_PAID: { cls: 'err', title: 'Not paid', icon: '×' },
+      NOT_FOUND: { cls: 'warn', title: 'No such ticket', icon: '?' },
+      WRONG_DAY: { cls: 'warn', title: 'Wrong day', icon: '!' },
+      NOT_STARTED_TODAY: { cls: 'warn', title: 'Not today', icon: '!' }
+    };
+
+    (async function boot() {
+      const me = await requireRole('ADMIN', 'admin-login.html');
+      if (!me) return;
+      $('logoutBtn').addEventListener('click', async () => {
+        try { await API.post('/api/auth/logout', {}); } catch (e) { /* ignore */ }
+        window.location.href = 'admin-login.html';
+      });
+      bindThemeToggle();
+      $('scanForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const code = $('scanInput').value.trim();
+        if (!code) return;
+        try {
+          const result = await API.post('/api/admin/tickets/validate', { code });
+          showResult(result);
+          $('scanInput').value = '';
+          $('scanInput').focus();
+          loadToday();
+        } catch (err) {
+          toast(err.message, 'err');
+        }
+      });
+      $('scanInput').focus();
+      loadToday();
+    })();
+
+    function showResult(r) {
+      const style = RESULT_STYLE[r.result] || RESULT_STYLE.NOT_FOUND;
+      const box = $('scanResult');
+      box.className = 'scan-result ' + style.cls;
+      box.classList.remove('hidden');
+      box.innerHTML = `
+        <div class="scan-verdict"><span class="scan-icon">${style.icon}</span>
+          <div><strong>${esc(style.title)}</strong><small>${esc(r.message || '')}</small></div></div>
+        ${r.reference ? `<dl class="scan-detail">
+          <div><dt>Booking</dt><dd>${esc(r.reference)}</dd></div>
+          <div><dt>Film</dt><dd>${esc(r.movieTitle || '')}</dd></div>
+          <div><dt>Where</dt><dd>${esc(r.theatreName || '')} · ${esc(r.screenName || '')}</dd></div>
+          <div><dt>Show</dt><dd>${fmtDateTime(r.showTime)}</dd></div>
+          <div><dt>Seats</dt><dd>${(r.seatCodes || []).map(esc).join(', ')}</dd></div>
+          <div><dt>Paid</dt><dd>${money(r.paidAmount)}</dd></div>
+          <div><dt>Customer</dt><dd>${esc(r.customerName || '')}</dd></div>
+        </dl>` : ''}`;
+    }
+
+    async function loadToday() {
+      try {
+        const t = await API.get('/api/admin/tickets/today');
+        $('todayExpected').textContent = t.expected;
+        $('todayIn').textContent = t.checkedIn;
+        $('todayNoShows').textContent = t.noShows;
+        $('todayPercent').textContent = t.attendancePercent + '%';
+        $('recentScans').innerHTML = (t.recentScans || []).length
+          ? t.recentScans.map(s => `<li><strong>${esc(s.reference)}</strong>
+              <span>${esc(s.movieTitle)} · ${(s.seatCodes || []).join(', ')}</span>
+              <small>${fmtDateTime(s.checkedInAt)}</small></li>`).join('')
+          : '<li class="muted">Nothing scanned yet today.</li>';
+      } catch (err) {
+        toast(err.message, 'err');
+      }
+    }
+  </script>
+</body>
+</html>
